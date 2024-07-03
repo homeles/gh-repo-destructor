@@ -44,11 +44,8 @@ if [ -z "$ORG_NAME" ] || [ -z "$PERIOD" ]; then
     exit 1
 fi
 
-# Get the current time
-CURRENT_TIME=$(date +"%Y%m%d%H%M%S")
-
 # Concatenate the organization name and the current time to form the filename
-CSV_FILENAME="${ORG_NAME}_${CURRENT_TIME}.csv"
+CSV_FILENAME="${ORG_NAME}.csv"
 
 # Initialize the list of repos to be deleted
 REPOS_TO_DELETE=()
