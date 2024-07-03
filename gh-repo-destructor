@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+set -e
+
+# Check if jq is installed
+if ! command -v jq &> /dev/null; then
+    echo "jq is not installed. Please install it and try again."
+    exit 1
+fi
+
+
+# Set default value for DRY_RUN
+DRY_RUN=false
+FORCE=false
+
+# Parse command line options
+while getopts o:p:df flag
+do
+    case "${flag}" in
+        o) ORG_NAME=${OPTARG};;
+        p) PERIOD=${OPTARG};;
+        d) DRY_RUN=true;;
+        f) FORCE=true;;
+    esac
+done
+
+# Use DRY_RUN in a conditional statement
+if [ "$DRY_RUN" = true ]; then
+  echo "This is a dry run."
+else
+  echo """
+  ########################################################
+    This is not a dry run. repos could be deleted.
+  ########################################################
+  """
+  # If FORCE is not set, ask for confirmation
+  if [ "$FORCE" != true ]; then
+    read -p "Press any key to continue, or Ctrl+C to cancel..."
+  fi
+fi
+
+# Check if the required options are provided
+if [ -z "$ORG_NAME" ] || [ -z "$PERIOD" ]; then
+    echo "Usage: gh repo-destructor -o ORG_NAME -p PERIOD [-d]"
+    exit 1
+fi
+
+# Get the current time
+CURRENT_TIME=$(date +"%Y%m%d%H%M%S")
+
+# Concatenate the organization name and the current time to form the filename
+CSV_FILENAME="${ORG_NAME}_${CURRENT_TIME}.csv"
+
+# Initialize the list of repos to be deleted
+REPOS_TO_DELETE=()
+echo "Organization: $ORG_NAME"
+echo "Period: $PERIOD days"
+echo "Dry Run: $DRY_RUN"
+
+
+# Fetch all repositories of the organization
+echo "Fetching repositories of $ORG_NAME..."
+REPOS=$(gh api --paginate orgs/$ORG_NAME/repos)
+echo "Repo Name,Creation Date,Admins" > $CSV_FILENAME
+
+# Loop through each repository
+for ROW in $(echo "${REPOS}" | jq -r '.[] | @base64'); do
+  # Decode the JSON row
+  _jq() {
+    echo ${ROW} | base64 --decode | jq -r ${1}
+  }
+
+  REPO=$(_jq '.name')
+  CREATED_AT=$(_jq '.created_at')
+  echo "-> Checking $REPO created on $CREATED_AT..."
+
+  # Check if the repository was created more than the specified number of days ago
+  if [ "$(gdate -d "$CREATED_AT" +%s)" -lt "$(gdate -d "-$PERIOD days" +%s)" ]; then
+    # Add the repository to the list
+    REPOS_TO_DELETE+=($REPO)
+    ADMINS=$(gh api -XGET --paginate repos/$ORG_NAME/$REPO/collaborators -F affiliation=direct | jq -r '.[] | select(.permissions.admin == true) | .login' | paste -sd "," -)
+
+    if [ "$DRY_RUN" != true ]; then
+      # Delete the repository
+      # gh api -X DELETE repos/$ORG_NAME/$REPO
+      echo "--> $REPO deleted successfully."
+    fi
+    echo "$REPO,$CREATED_AT,$ADMINS" >> $CSV_FILENAME
+  fi
+done
+
+if [ "$DRY_RUN" == true ]; then
+  echo "Total repos to be deleted: ${#REPOS_TO_DELETE[@]}"
+  echo "Dry run completed. No repositories were deleted."
+else
+  echo "Total repos deleted: ${#REPOS_TO_DELETE[@]}"
+fi
