@@ -60,7 +60,7 @@ echo "Dry Run: $DRY_RUN"
 # Fetch all repositories of the organization
 echo "Fetching repositories of $ORG_NAME..."
 REPOS=$(gh api --paginate orgs/$ORG_NAME/repos)
-echo "Repo Name,Creation Date,Admins" > $CSV_FILENAME
+echo "Repo Name,Creation Date,Repo Adminstrators" > $CSV_FILENAME
 
 # Loop through each repository
 for ROW in $(echo "${REPOS}" | jq -r '.[] | @base64'); do
@@ -74,14 +74,14 @@ for ROW in $(echo "${REPOS}" | jq -r '.[] | @base64'); do
   echo "-> Checking $REPO created on $CREATED_AT..."
 
   # Check if the repository was created more than the specified number of days ago
-  if [ "$(gdate -d "$CREATED_AT" +%s)" -lt "$(gdate -d "-$PERIOD days" +%s)" ]; then
+  if [ "$(date -d "$CREATED_AT" +%s)" -lt "$(date -d "-$PERIOD days" +%s)" ]; then
     # Add the repository to the list
     REPOS_TO_DELETE+=($REPO)
     ADMINS=$(gh api -XGET --paginate repos/$ORG_NAME/$REPO/collaborators -F affiliation=direct | jq -r '.[] | select(.permissions.admin == true) | .login' | paste -sd "," -)
 
     if [ "$DRY_RUN" != true ]; then
       # Delete the repository
-      # gh api -X DELETE repos/$ORG_NAME/$REPO
+      gh api -X DELETE repos/$ORG_NAME/$REPO
       echo "--> $REPO deleted successfully."
     fi
     echo "$REPO,$CREATED_AT,$ADMINS" >> $CSV_FILENAME
