@@ -1,0 +1,29 @@
+name: Repo Destructor
+
+on:
+  workflow_dispatch:
+ 
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: GitHub CLI validation
+        run: gh auth status
+        env:
+          GH_TOKEN: ${{ secrets.ORG_TOKEN }}
+      - name: Install CLI Extension
+        run: gh extension install homeles/gh-repo-destructor
+        env:
+          GH_TOKEN: ${{ secrets.ORG_TOKEN }}
+      - name: Execute
+        run: gh repo-destructor -o HomelesVolcano -p 180 -d
+        env:
+          GH_TOKEN: ${{ secrets.ORG_TOKEN }}
+        
+      - name: Adding markdown
+        run: cat HomelesVolcano.csv >> $GITHUB_STEP_SUMMARY
+      - uses: actions/upload-artifact@v3
+        with:
+          name: report
+          path: |
+            HomelesVolcano.csv
